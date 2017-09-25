@@ -41,7 +41,6 @@ app.get("/groceries", function (request, response) {
   }, callback);
 });
 
-
 app.post("/groceries", function(request, response) {
   var callback = function (err, res, body) {
     response.send(res)
