@@ -1,13 +1,13 @@
 var express = require("express"),
-    alexa = require("alexa-app"),
-    request = require("request"),
-    uuid = require('uuid/v4'),
-    Promise = require('bluebird'),
-    BASE_URL = 'https://api.forecast.io/forecast/' + process.env.WEATHER_API_KEY + '/38.9649734,-77.0207249', // Using coordinates of Washington DC, replace with your own or a lookup for an Alexa user's address
-    PORT = process.env.PORT || 3000,
-    app = express(),
-    // Setup the alexa app and attach it to express before anything else.
-    alexaApp = new alexa.app("paprika");
+  alexa = require("alexa-app"),
+  request = require("request-promise"),
+  uuid = require('uuid/v4'),
+  BASE_URL = 'https://api.forecast.io/forecast/' + process.env.WEATHER_API_KEY + '/38.9649734,-77.0207249', // Using coordinates of Washington DC, replace with your own or a lookup for an Alexa user's address
+  PORT = process.env.PORT || 3000,
+  app = express(),
+  // Setup the alexa app and attach it to express before anything else.
+  alexaApp = new alexa.app("paprika");
+
 
 const zlib = require('zlib');
 
@@ -22,114 +22,98 @@ alexaApp.express({
 
 app.set("view engine", "ejs");
 
-alexaApp.launch(function(request, response) {
+alexaApp.launch(function (request, response) {
   console.log("App launched");
   response.say('I can tell you the weather<break time="1s"/> but you must give me a day!');
 });
 
 // The main Weather intent - checks if a day/date was supplied or not and sends the appropriate response
 alexaApp.intent("AddItem", {
-    "slots": { "item": "AMAZON.Food" },
+    "slots": {
+      "item": "AMAZON.Food"
+    },
     "utterances": [
-      "what's the weather for {WHEN}",
-      "what I should expect on {WHEN}",
-      "tell me the weather",
-      "{WHEN}"
     ]
   },
-  function(request, response) {
+  function (request, response) {
     console.log("In AddItem intent");
-    // If the requester specified a date/day
     if (request.data.request.intent.slots.item &&
-        request.data.request.intent.slots.item.value) {
-        // Request the weather - we're using Promises to delay the response until we have data back from forecast.io
-        console.log(request.data.request.intent.slots.item.value)
-
-        return postItem(request.data.request.intent.slots.item.value, response)
-                .then(function(response) {
-        });
-          // .then(function (weather) {
-          //   console.log('Responding to weather request for ' + request.data.request.intent.slots.WHEN.value + ' with:', weather);
-          //   response.say(weather);
-          // })
-          // .catch(function(err){
-          //   response.say(err);
-          // });
+      request.data.request.intent.slots.item.value) {
+      console.log(request.data.request.intent.slots.item.value)
+      return postItem(request.data.request.intent.slots.item.value, response)
     } else {
-      // If the requester didn't specify a date/day
-      console.log('Responding to weather request with no day/date');
-      response.say('I can tell you the weather<break time="1s"/> but you must give me a day');
+      console.log('Responding to request with no ditem');
+      response.say('I\'m not sure what item you want to add to your list');
     }
   }
 );
 
 alexaApp.intent("AMAZON.CancelIntent", {
-    "slots": {},
-    "utterances": []
-  }, function(request, response) {
-    console.log("Sent cancel response");
-  	response.say("Ok, sure thing");
-  	return;
-  }
-);
+  "slots": {},
+  "utterances": []
+}, function (request, response) {
+  console.log("Sent cancel response");
+  response.say("Ok, sure thing");
+  return;
+});
 
 alexaApp.intent("AMAZON.StopIntent", {
-    "slots": {},
-    "utterances": []
-  }, function(request, response) {
-    console.log("Sent stop response");
-  	response.say("Alright, I'll stop");
-  	return;
-  }
-);
+  "slots": {},
+  "utterances": []
+}, function (request, response) {
+  console.log("Sent stop response");
+  response.say("Alright, I'll stop");
+  return;
+});
 
-alexaApp.sessionEnded(function(request, response) {
+alexaApp.sessionEnded(function (request, response) {
   console.log("In sessionEnded");
   console.error('Alexa ended the session due to an error');
   // no response required
 });
 
-
-
-
-
-
 function postItem(item, response) {
+  var g = [{
+    "uid": uuid(),
+    "name": item,
+    "purchased": 0,
+    "order_flag": 19,
+    "recipe": "",
+    "aisle": "Unknown",
+    "deleted": false
+  }]
 
-      var callback = function (err, res, body) {
-        console.log("why no")
-        console.log(err)
-        console.log("hey")
-        response.say(item);
-      }
-      var f = [{"aisle": "Produce", "uid": "4ECACFA2-16CA-40AB-98AC-664CAB368449-1752-000001AA116CED6E", "order_flag": 0, "recipe": "Tomato Margherita Pasta", "name": "2 cups baby arugula", "purchased": false, "recipe_uid": null, "ingredient": "baby arugula"}]
-      var g = [{"uid":"7ad4ae86-3211-491e-8d84-5d4bb6a0ac12","name":item,"purchased":0,"order_flag":19,"recipe":"","aisle":"Produce","ingredient":"eggplant","deleted":false}]
+  console.log("adding item")
+  var result = zlib.gzipSync(JSON.stringify(g));
 
-      console.log("adding item")
-      zlib.gzip(JSON.stringify(g), function (error, result) {
-       if (error) response.say(error);
-       console.log("posting")
-
-      var uri = 'https://www.paprikaapp.com/api/v1/sync/groceries/';
-      var postreq = request.post({
-        'uri': uri,
-        'auth': {
-          'user': process.env.PAPRIKA_USER,
-          'pass': process.env.PAPRIKA_PASSWORD,
-          'sendImmediately': true
-        },
-        headers: {
-          'Content-Encoding': 'gzip'
+  var uri = 'https://www.paprikaapp.com/api/v1/sync/groceries/';
+  return request.post({
+    'uri': uri,
+    'auth': {
+      'user': process.env.PAPRIKA_USER,
+      'pass': process.env.PAPRIKA_PASSWORD,
+      'sendImmediately': true
+    },
+    headers: {
+      'Content-Encoding': 'gzip'
+    },
+    formData: {
+      data: {
+        value: result,
+        options: {
+          filename: 'file',
+          contentType: 'application/octet-stream'
         }
+      }
+    }
 
-      }, callback);
-      var form = postreq.form();
-      form.append('data', result, {
-        filename: 'file',
-        contentType: 'application/octet-stream'
-      });
-      
-    })
+  }).then(function (body) {
+    console.log("yes?")
+    console.log(body)
+    response.say("I've added " + item + " to your list")
+  }).catch(function (err) {
+    console.log(err)
+  });
 
 };
 
